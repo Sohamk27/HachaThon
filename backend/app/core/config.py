@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = Field(default="gpt-4-turbo-preview", env="OPENAI_MODEL")
     OPENAI_TEMPERATURE: float = Field(default=0.1, env="OPENAI_TEMPERATURE")
     OPENAI_MAX_TOKENS: int = Field(default=1000, env="OPENAI_MAX_TOKENS")
+    OPENAI_TIMEOUT: int = Field(default=30, env="OPENAI_TIMEOUT")  # Timeout in seconds
     
     # LangChain Configuration
     LANGCHAIN_TRACING_V2: bool = Field(default=False, env="LANGCHAIN_TRACING_V2")

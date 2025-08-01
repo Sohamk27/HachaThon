@@ -5,8 +5,9 @@ Uses OpenAI GPT models for intent parsing, entity extraction, and SQL generation
 
 import json
 import re
+import asyncio
 from typing import Dict, List, Any, Optional
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APITimeoutError, APIError
 from app.core.config import settings
 from app.core.logger import get_logger
 
@@ -17,13 +18,29 @@ class NLPService:
     """Service for natural language processing operations"""
     
     def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        # Check if API key is configured
+        if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY == "your_openai_api_key_here":
+            logger.warning("OpenAI API key not configured - will use fallback responses only")
+            self.openai_available = False
+        else:
+            self.openai_available = True
+            
+        self.client = AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            timeout=settings.OPENAI_TIMEOUT
+        )
         self.model = settings.OPENAI_MODEL
         self.temperature = settings.OPENAI_TEMPERATURE
         self.max_tokens = settings.OPENAI_MAX_TOKENS
+        self.timeout = settings.OPENAI_TIMEOUT
     
     async def parse_intent(self, query: str) -> Dict[str, Any]:
         """Parse user intent from natural language query"""
+        
+        # Skip OpenAI if not available
+        if not self.openai_available:
+            logger.info("Using fallback intent parsing - OpenAI not available")
+            return self._fallback_intent_parsing(query)
         
         system_prompt = """
         You are an expert at understanding user intents for SQL database queries.
@@ -50,27 +67,39 @@ class NLPService:
         user_prompt = f"Query: {query}"
         
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+            # Add timeout for the OpenAI call
+            response = await asyncio.wait_for(
+                self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                ),
+                timeout=self.timeout
             )
             
             result = json.loads(response.choices[0].message.content)
             logger.info("Intent parsed successfully", intent=result.get("intent"))
             return result
             
+        except asyncio.TimeoutError:
+            logger.error("OpenAI request timed out", timeout=self.timeout)
+            return self._fallback_intent_parsing(query)
         except Exception as e:
-            logger.error("Error parsing intent", error=str(e))
+            logger.error("Error parsing intent", error=str(e), error_type=type(e).__name__)
             # Fallback to simple pattern matching
             return self._fallback_intent_parsing(query)
     
     async def extract_entities(self, query: str, schema_context: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """Extract entities from natural language query"""
+        
+        # Skip OpenAI if not available
+        if not self.openai_available:
+            logger.info("Using fallback entity extraction - OpenAI not available")
+            return self._fallback_entity_extraction(query)
         
         schema_info = ""
         if schema_context:
@@ -102,22 +131,28 @@ class NLPService:
         user_prompt = f"Query: {query}"
         
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+            response = await asyncio.wait_for(
+                self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                ),
+                timeout=self.timeout
             )
             
             entities = json.loads(response.choices[0].message.content)
             logger.info("Entities extracted successfully", count=len(entities))
             return entities
             
+        except asyncio.TimeoutError:
+            logger.error("OpenAI request timed out for entity extraction", timeout=self.timeout)
+            return self._fallback_entity_extraction(query)
         except Exception as e:
-            logger.error("Error extracting entities", error=str(e))
+            logger.error("Error extracting entities", error=str(e), error_type=type(e).__name__)
             return self._fallback_entity_extraction(query)
     
     async def generate_sql(
@@ -128,6 +163,11 @@ class NLPService:
         user_preferences: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Generate SQL query from natural language"""
+        
+        # Skip OpenAI if not available
+        if not self.openai_available:
+            logger.info("Using fallback SQL generation - OpenAI not available")
+            return self._fallback_sql_generation(natural_language_query)
         
         schema_info = ""
         if schema_context:
@@ -181,14 +221,17 @@ class NLPService:
         user_prompt = f"Convert this to SQL: {natural_language_query}"
         
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+            response = await asyncio.wait_for(
+                self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                ),
+                timeout=self.timeout
             )
             
             result = json.loads(response.choices[0].message.content)
@@ -199,8 +242,11 @@ class NLPService:
             logger.info("SQL generated successfully", query_length=len(result["sql_query"]))
             return result
             
+        except asyncio.TimeoutError:
+            logger.error("OpenAI request timed out for SQL generation", timeout=self.timeout)
+            return self._fallback_sql_generation(natural_language_query)
         except Exception as e:
-            logger.error("Error generating SQL", error=str(e))
+            logger.error("Error generating SQL", error=str(e), error_type=type(e).__name__)
             return self._fallback_sql_generation(natural_language_query)
     
     def _sanitize_sql(self, sql_query: str) -> str:
@@ -271,14 +317,41 @@ class NLPService:
     
     def _fallback_sql_generation(self, query: str) -> Dict[str, Any]:
         """Fallback SQL generation for simple cases"""
+        query_lower = query.lower()
+        
+        # Try to generate more intelligent fallback queries
+        if "people" in query_lower or "users" in query_lower:
+            if "first" in query_lower or "10" in query_lower or "limit" in query_lower:
+                sql_query = "SELECT * FROM users LIMIT 10;"
+                explanation = "Retrieves the first 10 records from the users table"
+            else:
+                sql_query = "SELECT * FROM users;"
+                explanation = "Retrieves all records from the users table"
+        elif "count" in query_lower:
+            sql_query = "SELECT COUNT(*) FROM users;"
+            explanation = "Counts the total number of records in the users table"
+        elif "products" in query_lower:
+            sql_query = "SELECT * FROM products LIMIT 10;"
+            explanation = "Retrieves the first 10 products from the products table"
+        elif "orders" in query_lower:
+            sql_query = "SELECT * FROM orders LIMIT 10;"
+            explanation = "Retrieves the first 10 orders from the orders table"
+        else:
+            sql_query = "SELECT * FROM users LIMIT 10;"
+            explanation = "Default query - please provide more specific requirements or check OpenAI API configuration"
+        
         return {
-            "sql_query": "SELECT * FROM table_name LIMIT 10;",
-            "explanation": "Fallback query - please provide more specific requirements",
-            "confidence": 0.3,
+            "sql_query": sql_query,
+            "explanation": explanation,
+            "confidence": 0.6,
             "suggested_modifications": [
-                "Specify table name",
-                "Add WHERE conditions",
-                "Select specific columns"
+                "Specify exact table and column names",
+                "Add WHERE conditions for filtering",
+                "Consider JOIN operations if multiple tables are needed",
+                "Check OpenAI API key configuration for better results"
             ],
-            "metadata": {"fallback": True}
+            "metadata": {
+                "fallback": True,
+                "reason": "OpenAI API unavailable or timed out"
+            }
         }
