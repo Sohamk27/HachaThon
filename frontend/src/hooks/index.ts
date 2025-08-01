@@ -150,7 +150,7 @@ export const useSchema = () => {
     if (currentSchema) {
       generateEmbeddingMutation.mutate(currentSchema);
     }
-  }, [currentSchema, generateEmbeddingMutation]);
+  }, [currentSchema]); // Removed generateEmbeddingMutation from dependencies
 
   return {
     schema: currentSchema,
@@ -178,7 +178,7 @@ export const useQuerySuggestions = () => {
 
 // Hook for managing chat functionality
 export const useChat = () => {
-  const { getChatHistory, clearChat } = useAppStore();
+  const { getChatHistory, clearChat, addChatMessage } = useAppStore();
   const [isTyping, setIsTyping] = useState(false);
 
   const messages = getChatHistory();
@@ -188,11 +188,62 @@ export const useChat = () => {
     setTimeout(() => setIsTyping(false), duration);
   }, []);
 
+  const sendMessage = useCallback(async (messageText: string) => {
+    if (!messageText.trim()) return;
+
+    try {
+      // Add user message to chat
+      const userMessage: ChatMessage = {
+        id: generateId(),
+        type: 'user',
+        content: messageText.trim(),
+        timestamp: new Date()
+      };
+      addChatMessage(userMessage);
+
+      // Show typing indicator
+      setIsTyping(true);
+
+      // Send message to AI service
+      const response = await aiService.sendChatMessage(
+        messageText.trim(),
+        'user-1', // Default user ID for demo
+        undefined, // No conversation ID for simplicity
+        {}
+      );
+
+      // Add AI response to chat
+      const aiMessage: ChatMessage = {
+        id: generateId(),
+        type: 'assistant',
+        content: response.message,
+        timestamp: new Date(),
+        suggestions: response.actions?.map((action: any) => action.label || action.text || action) || []
+      };
+      addChatMessage(aiMessage);
+      
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+      
+      // Add error message
+      const errorMessage: ChatMessage = {
+        id: generateId(),
+        type: 'system',
+        content: 'Sorry, I encountered an error processing your message. Please try again.',
+        timestamp: new Date()
+      };
+      addChatMessage(errorMessage);
+    } finally {
+      setIsTyping(false);
+    }
+  }, [addChatMessage]);
+
   return {
     messages,
     isTyping,
     simulateTyping,
-    clearChat
+    clearChat,
+    sendMessage
   };
 };
 

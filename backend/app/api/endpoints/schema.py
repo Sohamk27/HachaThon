@@ -4,7 +4,12 @@ Schema management endpoints
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import List, Dict, Any
-from app.schemas.schema import SchemaUploadResponse, SchemaInfoResponse
+from app.schemas.schema import (
+    SchemaUploadResponse, 
+    SchemaInfoResponse, 
+    GenerateEmbeddingRequest, 
+    GenerateEmbeddingResponse
+)
 from app.services.schema_service import SchemaService
 from app.core.logger import get_logger
 
@@ -50,3 +55,28 @@ async def get_schema_info(schema_id: str = None):
     except Exception as e:
         logger.error("Failed to fetch schema info", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch schema information")
+
+
+@router.post("/generate-embedding", response_model=GenerateEmbeddingResponse)
+async def generate_schema_embedding(request: GenerateEmbeddingRequest):
+    """Generate embeddings for database schema"""
+    try:
+        logger.info("Generating schema embedding", schema_id=request.schema_id)
+        
+        schema_service = SchemaService()
+        result = await schema_service.generate_embedding(
+            schema_id=request.schema_id,
+            include_relationships=request.include_relationships,
+            embedding_type=request.embedding_type
+        )
+        
+        return GenerateEmbeddingResponse(
+            success=result["success"],
+            embedding_id=result["embedding_id"],
+            schema_id=result["schema_id"],
+            embedding_dimensions=result["embedding_dimensions"],
+            metadata=result.get("metadata", {})
+        )
+    except Exception as e:
+        logger.error("Failed to generate schema embedding", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate schema embedding")

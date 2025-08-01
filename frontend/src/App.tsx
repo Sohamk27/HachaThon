@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ import SchemaManager from './components/schema/SchemaManager';
 
 // Store and hooks
 import { useAppStore } from './store';
+import { aiService } from './services/aiService';
 import type { DatabaseSchema, UserQuery } from './types';
 
 // Create a client
@@ -77,7 +78,23 @@ type ViewType = 'dashboard' | 'query' | 'results' | 'chat' | 'schema' | 'history
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
-  const { addUserQuery, queryHistory } = useAppStore();
+  const { addUserQuery, queryHistory, setSchema, currentSchema } = useAppStore();
+
+  // Load default schema on app start
+  useEffect(() => {
+    const loadDefaultSchema = async () => {
+      try {
+        if (!currentSchema) {
+          const schema = await aiService.getSchemaInfo();
+          setSchema(schema);
+        }
+      } catch (error) {
+        console.error('Failed to load default schema:', error);
+      }
+    };
+
+    loadDefaultSchema();
+  }, [currentSchema, setSchema]);
 
   const handleSchemaChange = (schema: DatabaseSchema) => {
     console.log('Schema updated:', schema);

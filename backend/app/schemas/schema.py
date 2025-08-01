@@ -28,3 +28,19 @@ class SchemaInfoResponse(BaseModel):
     tables: List[TableInfo] = Field(..., description="Table information")
     relationships: List[Dict[str, Any]] = Field(default=[], description="Table relationships")
     metadata: Dict[str, Any] = Field(default={}, description="Additional metadata")
+
+
+class GenerateEmbeddingRequest(BaseModel):
+    """Request schema for generating schema embeddings"""
+    schema_id: Optional[str] = Field(None, description="Schema identifier")
+    include_relationships: bool = Field(True, description="Include table relationships in embedding")
+    embedding_type: str = Field("semantic", description="Type of embedding to generate")
+
+
+class GenerateEmbeddingResponse(BaseModel):
+    """Response schema for schema embedding generation"""
+    success: bool = Field(..., description="Whether embedding generation was successful")
+    embedding_id: str = Field(..., description="Unique embedding identifier")
+    schema_id: str = Field(..., description="Schema identifier")
+    embedding_dimensions: int = Field(..., description="Dimensions of the embedding vector")
+    metadata: Dict[str, Any] = Field(default={}, description="Additional metadata")

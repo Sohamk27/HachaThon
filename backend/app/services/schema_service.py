@@ -175,3 +175,84 @@ class SchemaService:
                 "uploaded_at": "2024-01-01T00:00:00Z"
             }
         }
+    
+    async def generate_embedding(
+        self, 
+        schema_id: str = None,
+        include_relationships: bool = True,
+        embedding_type: str = "semantic"
+    ) -> Dict[str, Any]:
+        """Generate embeddings for database schema"""
+        
+        try:
+            # Get schema info
+            schema_info = await self.get_schema_info(schema_id)
+            
+            # Create text representation for embedding
+            schema_text = self._schema_to_text(schema_info, include_relationships)
+            
+            # Generate mock embedding (in real implementation, would use OpenAI/other embedding service)
+            embedding_id = str(uuid.uuid4())
+            
+            # Mock embedding dimensions (typically 1536 for OpenAI text-embedding-ada-002)
+            embedding_dimensions = 1536
+            
+            # Store embedding (in real implementation, would store in vector database)
+            embedding_data = {
+                "embedding_id": embedding_id,
+                "schema_id": schema_info["schema_id"],
+                "embedding_type": embedding_type,
+                "schema_text": schema_text,
+                "dimensions": embedding_dimensions,
+                "created_at": "2024-01-01T00:00:00Z"
+            }
+            
+            return {
+                "success": True,
+                "embedding_id": embedding_id,
+                "schema_id": schema_info["schema_id"],
+                "embedding_dimensions": embedding_dimensions,
+                "metadata": {
+                    "embedding_type": embedding_type,
+                    "include_relationships": include_relationships,
+                    "schema_text_length": len(schema_text)
+                }
+            }
+            
+        except Exception as e:
+            logger.error("Failed to generate schema embedding", error=str(e))
+            raise Exception(f"Failed to generate embedding: {str(e)}")
+    
+    def _schema_to_text(self, schema_info: Dict[str, Any], include_relationships: bool = True) -> str:
+        """Convert schema information to text for embedding generation"""
+        
+        text_parts = []
+        
+        # Add schema overview
+        text_parts.append(f"Database Schema: {schema_info['schema_id']}")
+        text_parts.append(f"Tables: {len(schema_info['tables'])}")
+        
+        # Add table information
+        for table in schema_info['tables']:
+            table_text = f"Table {table['name']}:"
+            
+            # Add columns
+            for col in table['columns']:
+                col_desc = f"  - {col['name']} ({col['type']}"
+                if not col.get('nullable', True):
+                    col_desc += ", NOT NULL"
+                if col.get('primary_key', False):
+                    col_desc += ", PRIMARY KEY"
+                col_desc += ")"
+                table_text += f"\n{col_desc}"
+            
+            text_parts.append(table_text)
+        
+        # Add relationships if requested
+        if include_relationships and schema_info.get('relationships'):
+            text_parts.append("Relationships:")
+            for rel in schema_info['relationships']:
+                rel_text = f"  - {rel['from_table']} -> {rel['to_table']} ({rel['relationship_type']})"
+                text_parts.append(rel_text)
+        
+        return "\n\n".join(text_parts)

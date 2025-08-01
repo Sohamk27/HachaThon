@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Paper,
@@ -9,7 +9,10 @@ import {
   Tooltip,
   List,
   ListItem,
-  Divider
+  Divider,
+  TextField,
+  Button,
+  InputAdornment
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -17,7 +20,8 @@ import {
   ContentCopy as CopyIcon,
   ThumbUp as ThumbUpIcon,
   ThumbDown as ThumbDownIcon,
-  Replay as ReplayIcon
+  Replay as ReplayIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import { useChat } from '../../hooks';
 import type { ChatMessage } from '../../types';
@@ -241,13 +245,33 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onRerun }) => {
 };
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onRerunQuery }) => {
-  const { messages, isTyping, clearChat } = useChat();
+  const { messages, isTyping, clearChat, sendMessage } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [inputMessage, setInputMessage] = useState('');
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    
+    if (!inputMessage.trim() || isTyping) {
+      return;
+    }
+
+    const message = inputMessage.trim();
+    setInputMessage('');
+    await sendMessage(message);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -412,6 +436,48 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onRerunQuery }) =>
             <div ref={messagesEndRef} />
           </List>
         )}
+      </Box>
+
+      {/* Chat Input */}
+      <Box
+        sx={{
+          p: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper'
+        }}
+      >
+        <form onSubmit={handleSendMessage}>
+          <TextField
+            fullWidth
+            multiline
+            minRows={1}
+            maxRows={4}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your message here..."
+            disabled={isTyping}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    type="submit"
+                    disabled={!inputMessage.trim() || isTyping}
+                    color="primary"
+                  >
+                    <SendIcon />
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 3
+              }
+            }}
+          />
+        </form>
       </Box>
     </Box>
   );
